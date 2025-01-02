@@ -1,0 +1,29 @@
+# Exclure les fichiers inutiles
+*.psd
+*.pdf
+/test
+/spec
+*.log
+/tmp
+/venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+/myenv
+/myenv_pyrebase
+/public
+/Logo.jpg
+# Exclure les fichiers volumineux
+/data/
+/models/
+/logs/
+/venv/
+/myenv/
+/myenv_pyrebase/
+__pycache__/
+*.log
+*.zip
+*.tar.gz

@@ -1,0 +1,23 @@
+# Ignorer les fichiers de configuration sensibles
+.env
+.firebase/
+.firebaserc
+firebase_credentials.json
+
+# Ignorer les dossiers de cache et de dépendances
+__pycache__/
+.venv/
+venv/
+myenv/
+myenv_pyrebase/
+
+# Ignorer les fichiers de logs
+*.log
+
+# Ignorer les fichiers temporaires
+*.tmp
+*.bak
+
+# Ignorer les fichiers générés par l'IDE
+.idea/
+.vscode/
