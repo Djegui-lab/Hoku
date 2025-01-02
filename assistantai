@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import logging
 import streamlit as st
 from googleapiclient.discovery import build
@@ -8,26 +7,31 @@ from google.oauth2 import service_account
 from google.generativeai import GenerativeModel, configure
 from google.api_core.exceptions import GoogleAPIError
 import boto3
-from transformers import BertTokenizer, BertForSequenceClassification
-import torch
+import requests  # Pour faire des appels HTTP à l'API Hugging Face
 
 # Configuration de la journalisation
 logging.basicConfig(filename="app.log", level=logging.INFO, format="%(asctime)s - %(message)s")
 
-# Charger le modèle et le tokenizer BERT pré-entraînés
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=3)  # 3 classes : client, company, comparison
+# Clé API Hugging Face
+HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli"
 
-# Fonction pour classifier la question
-def classify_question_with_bert(question):
-    """Classifie la question en utilisant un modèle BERT pré-entraîné."""
-    inputs = tokenizer(question, return_tensors="pt", truncation=True, padding=True, max_length=512)
-    with torch.no_grad():
-        outputs = model(**inputs)
-        logits = outputs.logits
-    predicted_class = torch.argmax(logits, dim=1).item()
-    classes = ["client", "company", "comparison"]
-    return classes[predicted_class]
+# Fonction pour classifier la question avec Hugging Face Inference API
+def classify_question_with_huggingface(question):
+    """Classifie la question en utilisant Hugging Face Inference API."""
+    headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+    payload = {
+        "inputs": question,
+        "parameters": {"candidate_labels": ["client", "company", "comparison"]}
+    }
+    try:
+        response = requests.post(HUGGINGFACE_API_URL, headers=headers, json=payload)
+        response.raise_for_status()  # Vérifie les erreurs HTTP
+        result = response.json()
+        return result["labels"][0]  # Retourne la classe prédite
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Erreur lors de l'appel à Hugging Face API : {e}")
+        return "comparison"  # Retourne une valeur par défaut en cas d'erreur
 
 # Fonction pour demander le feedback utilisateur
 def ask_user_feedback(question, predicted_class):
@@ -310,7 +314,7 @@ def main():
     user_question = st.text_input("Entrez votre question ici")
     if st.button("Envoyer la question"):
         # Classifier la question
-        predicted_class = classify_question_with_bert(user_question)
+        predicted_class = classify_question_with_huggingface(user_question)
         final_class = ask_user_feedback(user_question, predicted_class)
         
         # Journaliser les erreurs
