@@ -14,16 +14,37 @@ logging.basicConfig(filename="app.log", level=logging.INFO, format="%(asctime)s 
 # Initialiser l'état de la session
 def initialize_session_state():
     """Initialise l'état de la session."""
-    if "history" not in st.session_state:
-        st.session_state.history = []
+    if "history_direct" not in st.session_state:
+        st.session_state.history_direct = []  # Historique pour les questions directes
+    if "history_deep" not in st.session_state:
+        st.session_state.history_deep = []  # Historique pour les analyses approfondies
     if "docs_text" not in st.session_state:
         st.session_state.docs_text = ""
     if "client_docs_text" not in st.session_state:
         st.session_state.client_docs_text = ""
 
-# Interroger Gemini avec l'historique des interactions
-def query_gemini_with_history(docs_text, client_docs_text, user_question, history, model="gemini-1.0-pro"):
-    """Interroge Gemini avec l'historique des interactions."""
+# Interroger Gemini pour une réponse directe (Gemini 1.0 Pro)
+def query_gemini_direct(user_question, model="gemini-1.0-pro"):
+    """Interroge Gemini pour une réponse directe."""
+    try:
+        prompt = f"""
+Tu es 🤖 Assurbot🤖, un assistant en assurance automobile. Ton objectif est de fournir des réponses claires, précises et concises.
+
+Question : {user_question}
+
+**Instructions :**
+- Réponds directement à la question sans inclure de contexte inutile.
+- Sois concis et précis.
+"""
+        model = GenerativeModel(model_name=model)
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        return f"Erreur lors de l'interrogation de Gemini : {e}"
+
+# Interroger Gemini pour une analyse approfondie (Gemini 2.0 Flash Exp)
+def query_gemini_deep(docs_text, client_docs_text, user_question, history, model="gemini-2.0-flash-exp"):
+    """Interroge Gemini pour une analyse approfondie."""
     try:
         history_str = "\n".join([f"Q: {h['question']}\nR: {h['response']}" for h in history[-5:]])  # Limiter l'historique
         prompt = f"""
@@ -281,28 +302,43 @@ def main():
         
         st.session_state.client_docs_text = client_docs_text
 
-    # Section pour poser des questions
-    st.header("❓ Posez une question sur les documents")
-    user_question = st.text_input("Entrez votre question ici")
-    if st.button("Envoyer la question"):
+    # Section pour les questions directes (Gemini 1.0 Pro)
+    st.header("❓ Posez une question directe")
+    user_question_direct = st.text_input("Entrez votre question directe ici", key="direct_question")
+    if st.button("Envoyer la question directe"):
         with st.spinner("Interrogation 🤖Assurbot..."):
-            response = query_gemini_with_history(
+            response = query_gemini_direct(user_question_direct)
+        st.session_state.history_direct.insert(0, {"question": user_question_direct, "response": response})
+
+    if st.session_state.history_direct:
+        with st.expander("📜 Historique des questions directes", expanded=True):
+            for interaction in st.session_state.history_direct:
+                st.markdown(f"**Question :** {interaction['question']}")
+                st.markdown(f"**Réponse :** {interaction['response']}")
+                st.markdown("---")
+
+    # Section pour les analyses approfondies (Gemini 2.0 Flash Exp)
+    st.header("🔍 Posez une question pour une analyse approfondie")
+    user_question_deep = st.text_input("Entrez votre question pour une analyse approfondie ici", key="deep_question")
+    if st.button("Envoyer la question approfondie"):
+        with st.spinner("Analyse approfondie 🤖Assurbot..."):
+            response = query_gemini_deep(
                 st.session_state.docs_text,  # Conditions des compagnies
                 st.session_state.client_docs_text,  # Documents clients
-                user_question,
-                st.session_state.history
+                user_question_deep,
+                st.session_state.history_deep
             )
-        st.session_state.history.insert(0, {"question": user_question, "response": response})
+        st.session_state.history_deep.insert(0, {"question": user_question_deep, "response": response})
 
-    if st.session_state.history:
-        with st.expander("📜 Historique des interactions", expanded=True):
-            for interaction in st.session_state.history:
+    if st.session_state.history_deep:
+        with st.expander("📜 Historique des analyses approfondies", expanded=True):
+            for interaction in st.session_state.history_deep:
                 st.markdown(f"**Question :** {interaction['question']}")
                 st.markdown(f"**Réponse :** {interaction['response']}")
                 st.markdown("---")
 
     st.markdown("---")
-    st.markdown("© 2023 Assistant Assurance Auto. Tous droits réservés.")
+    st.markdown("© 2025 Assistant Assurance Auto. Tous droits réservés.")
 
 if __name__ == "__main__":
     main()
