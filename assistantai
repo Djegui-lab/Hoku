@@ -303,36 +303,47 @@ def main():
         
         st.session_state.client_docs_text = client_docs_text
 
-    # Section pour les questions directes (Gemini 1.0 Pro)
-    st.header("❓ Posez une question directe")
-    user_question_direct = st.text_input("Entrez votre question directe ici", key="direct_question")
-    if st.button("Envoyer la question directe"):
-        with st.spinner("Interrogation 🤖Assurbot..."):
-            response = query_gemini_direct(user_question_direct)
-        st.session_state.history_direct.insert(0, {"question": user_question_direct, "response": response})
+    # Section pour poser une question
+    st.header("❓ Posez votre question")
+    user_question = st.text_input("Entrez votre question ici")
 
-    if st.session_state.history_direct:
-        with st.expander("📜 Historique des questions directes", expanded=True):
+    # Option pour choisir le type de réponse
+    response_type = st.radio(
+        "Choisissez le type de réponse :",
+        ("Réponse rapide", "Analyse approfondie"),
+        index=0  # Par défaut, sélectionner "Réponse rapide"
+    )
+
+    if st.button("Envoyer"):
+        with st.spinner("🤖 Assurbot réfléchit..."):
+            if response_type == "Réponse rapide":
+                response = query_gemini_direct(user_question)  # Utilise Gemini 1.0 Pro
+                st.session_state.history_direct.insert(0, {"question": user_question, "response": response})
+            else:
+                response = query_gemini_deep(
+                    st.session_state.docs_text,  # Conditions des compagnies
+                    st.session_state.client_docs_text,  # Documents clients
+                    user_question,
+                    st.session_state.history_deep
+                )  # Utilise Gemini 2.0 Flash Exp
+                st.session_state.history_deep.insert(0, {"question": user_question, "response": response})
+        
+        st.write("**Réponse :**")
+        st.write(response)
+
+    # Afficher l'historique des questions et réponses
+    if st.session_state.history_direct or st.session_state.history_deep:
+        st.header("📜 Historique des interactions")
+        
+        if st.session_state.history_direct:
+            st.subheader("Questions directes")
             for interaction in st.session_state.history_direct:
                 st.markdown(f"**Question :** {interaction['question']}")
                 st.markdown(f"**Réponse :** {interaction['response']}")
                 st.markdown("---")
-
-    # Section pour les analyses approfondies (Gemini 2.0 Flash Exp)
-    st.header("🔍 Posez une question pour une analyse approfondie")
-    user_question_deep = st.text_input("Entrez votre question pour une analyse approfondie ici", key="deep_question")
-    if st.button("Envoyer la question approfondie"):
-        with st.spinner("Analyse approfondie 🤖Assurbot..."):
-            response = query_gemini_deep(
-                st.session_state.docs_text,  # Conditions des compagnies
-                st.session_state.client_docs_text,  # Documents clients
-                user_question_deep,
-                st.session_state.history_deep
-            )
-        st.session_state.history_deep.insert(0, {"question": user_question_deep, "response": response})
-
-    if st.session_state.history_deep:
-        with st.expander("📜 Historique des analyses approfondies", expanded=True):
+        
+        if st.session_state.history_deep:
+            st.subheader("Analyses approfondies")
             for interaction in st.session_state.history_deep:
                 st.markdown(f"**Question :** {interaction['question']}")
                 st.markdown(f"**Réponse :** {interaction['response']}")
