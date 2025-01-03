@@ -5,7 +5,6 @@ import streamlit as st
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from google.generativeai import GenerativeModel, configure
-from google.api_core.exceptions import GoogleAPIError
 import boto3
 
 # Configuration de la journalisation
@@ -70,6 +69,7 @@ Question : {user_question}
         return f"Erreur lors de l'interrogation de Gemini : {e}"
 
 # Lister les fichiers dans un dossier Google Drive
+@st.cache_data
 def list_files_in_folder(folder_id, drive_service):
     """Liste les fichiers dans un dossier Google Drive."""
     try:
@@ -83,48 +83,43 @@ def list_files_in_folder(folder_id, drive_service):
         return []
 
 # Extraire le texte d'un document Google Docs (texte brut)
+@st.cache_data
 def get_google_doc_text(doc_id, docs_service):
     """Extrait le texte brut d'un document Google Docs."""
     try:
         document = docs_service.documents().get(documentId=doc_id).execute()
         text_content = ""
-        
-        # Parcourir chaque élément du document
         for element in document.get("body", {}).get("content", []):
             if "paragraph" in element:
-                # Extraire le texte des paragraphes
                 for text_run in element.get("paragraph", {}).get("elements", []):
                     if "textRun" in text_run:
                         text_content += text_run["textRun"]["content"]
-        
         return text_content.strip()
     except Exception as e:
         logging.error(f"Erreur lors de la lecture du document Google Docs (ID: {doc_id}) : {e}")
         return f"Erreur lors de la lecture du document Google Docs : {e}"
 
 # Charger les documents depuis plusieurs dossiers Google Drive
+@st.cache_data
 def load_documents(folder_ids, drive_service, docs_service):
     """Charge les documents depuis plusieurs dossiers Google Drive."""
-    if not st.session_state.docs_text:
-        docs_text = ""
-        for folder_id in folder_ids:
-            files = list_files_in_folder(folder_id, drive_service)
-            if files:
-                st.write(f"Compagnies détectés 😊✨🕵️")
-                for file in files:
-                    if file["mimeType"] == "application/vnd.google-apps.document":
-                        doc_text = get_google_doc_text(file["id"], docs_service)
-                        if "Erreur" not in doc_text and doc_text.strip():  # Vérifier que le texte est valide
-                            docs_text += f"\n\n---\n\n{doc_text}"
-                        else:
-                            st.warning(f"Le document {file['name']} ne contient pas de texte valide.")
+    docs_text = ""
+    for folder_id in folder_ids:
+        files = list_files_in_folder(folder_id, drive_service)
+        if files:
+            st.write(f"Compagnies détectés 😊✨🕵️")
+            for file in files:
+                if file["mimeType"] == "application/vnd.google-apps.document":
+                    doc_text = get_google_doc_text(file["id"], docs_service)
+                    if "Erreur" not in doc_text and doc_text.strip():
+                        docs_text += f"\n\n---\n\n{doc_text}"
                     else:
-                        st.warning(f"Type de fichier non pris en charge : {file['name']}")
-            else:
-                st.warning(f"Aucun fichier trouvé dans le dossier {folder_id}.")
-        if docs_text:
-            st.session_state.docs_text = docs_text
-            st.success("Service validation✅.")
+                        st.warning(f"Le document {file['name']} ne contient pas de texte valide.")
+                else:
+                    st.warning(f"Type de fichier non pris en charge : {file['name']}")
+        else:
+            st.warning(f"Aucun fichier trouvé dans le dossier {folder_id}.")
+    return docs_text
 
 # Fonction pour extraire le texte avec Amazon Textract
 def extract_text_with_textract(file_bytes):
@@ -248,6 +243,13 @@ def main():
 
     st.title("🚗 Assistant Courtier en Assurance Auto")
 
+    # Validation des variables d'environnement
+    required_env_vars = ["GEMINI_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS_JSON", "GOOGLE_DRIVE_FOLDER_ID"]
+    missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+    if missing_vars:
+        st.error(f"Les variables d'environnement suivantes sont manquantes : {', '.join(missing_vars)}")
+        st.stop()
+
     # Initialisation des services Google
     SCOPES = [
         "https://www.googleapis.com/auth/drive.readonly",
@@ -255,10 +257,6 @@ def main():
     ]
     SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-    if not SERVICE_ACCOUNT_JSON:
-        st.error("La variable d'environnement 'GOOGLE_APPLICATION_CREDENTIALS_JSON' est manquante ou vide.")
-        st.stop()
 
     try:
         google_credentials = json.loads(SERVICE_ACCOUNT_JSON)
@@ -281,7 +279,10 @@ def main():
         st.stop()
 
     # Charger les conditions des compagnies au démarrage
-    load_documents(folder_ids, drive_service, docs_service)
+    with st.spinner("Chargement des documents depuis Google Drive..."):
+        st.session_state.docs_text = load_documents(folder_ids, drive_service, docs_service)
+        if st.session_state.docs_text:
+            st.success("Service validation✅.")
 
     # Section pour téléverser les documents clients
     st.header("📄 Téléversez les documents des clients")
