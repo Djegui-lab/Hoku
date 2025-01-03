@@ -257,6 +257,7 @@ def main():
         st.error("La variable d'environnement 'GOOGLE_DRIVE_FOLDER_ID' n'est pas définie ou est vide.")
         st.stop()
 
+    # Charger les conditions des compagnies au démarrage
     load_documents(folder_ids, drive_service, docs_service)
 
     # Section pour téléverser les documents clients
@@ -284,7 +285,7 @@ def main():
     if st.button("Envoyer la question"):
         with st.spinner("Interrogation 🤖Assurbot..."):
             response = query_gemini_with_history(
-                st.session_state.docs_text,  # Documents Google Docs
+                st.session_state.docs_text,  # Conditions des compagnies préchargées
                 st.session_state.client_docs_text,  # Documents clients téléversés
                 user_question,
                 st.session_state.history
