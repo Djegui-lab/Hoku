@@ -13,60 +13,64 @@ logging.basicConfig(filename="app.log", level=logging.INFO, format="%(asctime)s 
 # Initialiser l'état de la session
 def initialize_session_state():
     """Initialise l'état de la session."""
-    if "history_direct" not in st.session_state:
-        st.session_state.history_direct = []  # Historique pour les questions directes
-    if "history_deep" not in st.session_state:
-        st.session_state.history_deep = []  # Historique pour les analyses approfondies
+    if "history" not in st.session_state:
+        st.session_state.history = []  # Historique des interactions
     if "docs_text" not in st.session_state:
-        st.session_state.docs_text = ""
+        st.session_state.docs_text = ""  # Contenu des documents Google Docs
     if "client_docs_text" not in st.session_state:
-        st.session_state.client_docs_text = ""
+        st.session_state.client_docs_text = ""  # Contenu des documents clients téléversés
 
-# Interroger Gemini pour une réponse directe (Gemini 1.0 Pro)
-def query_gemini_direct(user_question, model="gemini-1.0-pro"):
-    """Interroge Gemini pour une réponse directe."""
+# Interroger Gemini pour une réponse
+def query_gemini(user_question, model_name="gemini-1.0-pro", docs_text="", client_docs_text="", history=None):
+    """Interroge Gemini pour une réponse."""
     try:
-        prompt = f"""
-Tu es 🤖 Assurbot🤖, un assistant en assurance automobile. Ton objectif est de fournir des réponses claires, précises et concises.
+        # Construire le prompt en fonction du modèle
+        if model_name == "gemini-1.0-pro":
+            prompt = f"""
+            Tu es 🤖 Assurbot🤖, un assistant en assurance automobile. Ton objectif est de fournir des réponses claires, précises et concises.
 
-Question : {user_question}
+            Question : {user_question}
 
-**Instructions :**
-- Réponds directement à la question sans inclure de contexte inutile.
-- Sois concis et précis.
-"""
-        model = GenerativeModel(model_name=model)
+            **Instructions :**
+            - Réponds directement à la question sans inclure de contexte inutile.
+            - Sois concis et précis.
+            """
+        else:  # gemini-2.0-flash-exp
+            history_str = "\n".join([f"Q: {h['question']}\nR: {h['response']}" for h in (history or [])[-5:]])  # Limiter l'historique
+            prompt = f"""
+            Introduction et contexte :
+            Tu es 🤖 Assurbot🤖, un assistant en assurance automobile. Ton objectif est de fournir des analyses claires, précises et structurées.
+            Voici l'historique des conversations précédentes :
+            {history_str}
+
+            Voici les contenus extraits des documents clients :
+            {client_docs_text}
+
+            Voici les contenus des documents Google Docs (conditions des compagnies) :
+            {docs_text}
+
+            Question : {user_question}
+
+            **Instructions :**
+            - Fournis une réponse détaillée et structurée.
+            - Si les informations nécessaires ne sont pas disponibles, indique-le clairement.
+            """
+
+        # Interroger le modèle
+        model = GenerativeModel(model_name=model_name)
         response = model.generate_content(prompt)
-        return response.text.strip()
+
+        # Vérifier si la réponse contient du texte valide
+        if response.text:
+            return response.text.strip()
+        else:
+            return "Désolé, je n'ai pas pu générer de réponse valide pour cette question."
+
     except Exception as e:
-        return f"Erreur lors de l'interrogation de Gemini : {e}"
-
-# Interroger Gemini pour une analyse approfondie (Gemini 2.0 Flash Exp)
-def query_gemini_deep(docs_text, client_docs_text, user_question, history, model="gemini-2.0-flash-exp"):
-    """Interroge Gemini pour une analyse approfondie."""
-    try:
-        history_str = "\n".join([f"Q: {h['question']}\nR: {h['response']}" for h in history[-5:]])  # Limiter l'historique
-        prompt = f"""
-Introduction et contexte :
-Tu es 🤖 Assurbot🤖, un assistant en assurance automobile entraîné et créé par DJEGUI WAGUE. Ton objectif est de fournir des analyses claires, précises et structurées, tout en continuant à apprendre pour devenir un expert dans ce domaine.
-Voici l'historique des conversations précédentes :
-{history_str}
-
-Voici les contenus extraits des documents clients :
-{client_docs_text}
-
-Voici les contenus des documents Google Docs (conditions des compagnies) :
-{docs_text}
-
-Analyse la question suivante en te basant sur les informations fournies et fournis une réponse complète et structurée. Assure-toi de ne pas tronquer la réponse.
-
-Question : {user_question}
-"""
-        model = GenerativeModel(model_name=model)
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        return f"Erreur lors de l'interrogation de Gemini : {e}"
+        if "safety_ratings" in str(e):
+            return "Désolé, je ne peux pas répondre à cette question pour des raisons de sécurité."
+        else:
+            return f"Erreur lors de l'interrogation de Gemini : {e}"
 
 # Lister les fichiers dans un dossier Google Drive
 @st.cache_data
@@ -317,37 +321,29 @@ def main():
     if st.button("Envoyer"):
         with st.spinner("🤖 Assurbot réfléchit..."):
             if response_type == "Réponse rapide":
-                response = query_gemini_direct(user_question)  # Utilise Gemini 1.0 Pro
-                st.session_state.history_direct.insert(0, {"question": user_question, "response": response})
+                response = query_gemini(user_question, model_name="gemini-1.0-pro")
             else:
-                response = query_gemini_deep(
-                    st.session_state.docs_text,  # Conditions des compagnies
-                    st.session_state.client_docs_text,  # Documents clients
+                response = query_gemini(
                     user_question,
-                    st.session_state.history_deep
-                )  # Utilise Gemini 2.0 Flash Exp
-                st.session_state.history_deep.insert(0, {"question": user_question, "response": response})
+                    model_name="gemini-2.0-flash-exp",
+                    docs_text=st.session_state.docs_text,
+                    client_docs_text=st.session_state.client_docs_text,
+                    history=st.session_state.history
+                )
+            
+            # Enregistrer la question et la réponse dans l'historique
+            st.session_state.history.append({"question": user_question, "response": response})
         
         st.write("**Réponse :**")
         st.write(response)
 
-    # Afficher l'historique des questions et réponses
-    if st.session_state.history_direct or st.session_state.history_deep:
+    # Afficher l'historique des interactions
+    if st.session_state.history:
         st.header("📜 Historique des interactions")
-        
-        if st.session_state.history_direct:
-            st.subheader("Questions directes")
-            for interaction in st.session_state.history_direct:
-                st.markdown(f"**Question :** {interaction['question']}")
-                st.markdown(f"**Réponse :** {interaction['response']}")
-                st.markdown("---")
-        
-        if st.session_state.history_deep:
-            st.subheader("Analyses approfondies")
-            for interaction in st.session_state.history_deep:
-                st.markdown(f"**Question :** {interaction['question']}")
-                st.markdown(f"**Réponse :** {interaction['response']}")
-                st.markdown("---")
+        for interaction in st.session_state.history:
+            st.markdown(f"**Question :** {interaction['question']}")
+            st.markdown(f"**Réponse :** {interaction['response']}")
+            st.markdown("---")
 
     st.markdown("---")
     st.markdown("© 2025 Assistant Assurance Auto. Tous droits réservés.")
