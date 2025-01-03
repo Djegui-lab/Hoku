@@ -38,7 +38,7 @@ Voici les contenus extraits des documents clients :
 Voici les contenus des documents Google Docs (conditions des compagnies) :
 {docs_text}
 
-Analyse la question suivante en te basant sur les informations fournies et prends une décision ou fournis une réponse structurée.
+Analyse la question suivante en te basant sur les informations fournies et fournis une réponse complète et structurée. Assure-toi de ne pas tronquer la réponse.
 
 Question : {user_question}
 """
