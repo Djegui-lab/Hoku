@@ -35,7 +35,7 @@ Voici l'historique des conversations précédentes :
 Voici les contenus extraits des documents clients :
 {client_docs_text}
 
-Voici les contenus des documents Google Docs :
+Voici les contenus des documents Google Docs (conditions des compagnies) :
 {docs_text}
 
 Question : {user_question}
@@ -59,19 +59,24 @@ def list_files_in_folder(folder_id, drive_service):
         st.error(f"Erreur lors de la récupération des fichiers : {e}")
         return []
 
-# Extraire le texte d'un document Google Docs
+# Extraire le texte d'un document Google Docs (texte brut)
 def get_google_doc_text(doc_id, docs_service):
-    """Extrait le texte d'un document Google Docs."""
+    """Extrait le texte brut d'un document Google Docs."""
     try:
         document = docs_service.documents().get(documentId=doc_id).execute()
         text_content = ""
+        
+        # Parcourir chaque élément du document
         for element in document.get("body", {}).get("content", []):
             if "paragraph" in element:
+                # Extraire le texte des paragraphes
                 for text_run in element.get("paragraph", {}).get("elements", []):
                     if "textRun" in text_run:
                         text_content += text_run["textRun"]["content"]
+        
         return text_content.strip()
     except Exception as e:
+        logging.error(f"Erreur lors de la lecture du document Google Docs (ID: {doc_id}) : {e}")
         return f"Erreur lors de la lecture du document Google Docs : {e}"
 
 # Charger les documents depuis plusieurs dossiers Google Drive
@@ -86,7 +91,10 @@ def load_documents(folder_ids, drive_service, docs_service):
                 for file in files:
                     if file["mimeType"] == "application/vnd.google-apps.document":
                         doc_text = get_google_doc_text(file["id"], docs_service)
-                        docs_text += f"\n\n---\n\n{doc_text}"
+                        if "Erreur" not in doc_text and doc_text.strip():  # Vérifier que le texte est valide
+                            docs_text += f"\n\n---\n\n{doc_text}"
+                        else:
+                            st.warning(f"Le document {file['name']} ne contient pas de texte valide.")
                     else:
                         st.warning(f"Type de fichier non pris en charge : {file['name']}")
             else:
