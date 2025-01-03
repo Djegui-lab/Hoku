@@ -38,6 +38,8 @@ Voici les contenus extraits des documents clients :
 Voici les contenus des documents Google Docs (conditions des compagnies) :
 {docs_text}
 
+Analyse la question suivante en te basant sur les informations fournies et prends une décision ou fournis une réponse structurée.
+
 Question : {user_question}
 """
         model = GenerativeModel(model_name=model)
@@ -285,8 +287,8 @@ def main():
     if st.button("Envoyer la question"):
         with st.spinner("Interrogation 🤖Assurbot..."):
             response = query_gemini_with_history(
-                st.session_state.docs_text,  # Conditions des compagnies préchargées
-                st.session_state.client_docs_text,  # Documents clients téléversés
+                st.session_state.docs_text,  # Conditions des compagnies
+                st.session_state.client_docs_text,  # Documents clients
                 user_question,
                 st.session_state.history
             )
