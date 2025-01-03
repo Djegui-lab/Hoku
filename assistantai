@@ -7,48 +7,9 @@ from google.oauth2 import service_account
 from google.generativeai import GenerativeModel, configure
 from google.api_core.exceptions import GoogleAPIError
 import boto3
-import requests  # Pour faire des appels HTTP à l'API Hugging Face
 
 # Configuration de la journalisation
 logging.basicConfig(filename="app.log", level=logging.INFO, format="%(asctime)s - %(message)s")
-
-# Clé API Hugging Face
-HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
-HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli"
-
-# Fonction pour classifier la question avec Hugging Face Inference API
-def classify_question_with_huggingface(question):
-    """Classifie la question en utilisant Hugging Face Inference API."""
-    headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
-    payload = {
-        "inputs": question,
-        "parameters": {"candidate_labels": ["client", "company", "comparison"]}
-    }
-    try:
-        response = requests.post(HUGGINGFACE_API_URL, headers=headers, json=payload)
-        response.raise_for_status()  # Vérifie les erreurs HTTP
-        result = response.json()
-        return result["labels"][0]  # Retourne la classe prédite
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Erreur lors de l'appel à Hugging Face API : {e}")
-        return "comparison"  # Retourne une valeur par défaut en cas d'erreur
-
-# Fonction pour demander le feedback utilisateur
-def ask_user_feedback(question, predicted_class):
-    """Demande à l'utilisateur de confirmer ou de corriger la classification."""
-    st.write(f"Question : {question}")
-    st.write(f"Classification prédite : {predicted_class}")
-    feedback = st.radio("La classification est-elle correcte ?", ["Oui", "Non"])
-    if feedback == "Non":
-        corrected_class = st.selectbox("Corriger la classification :", ["client", "company", "comparison"])
-        return corrected_class
-    return predicted_class
-
-# Fonction pour journaliser les erreurs
-def log_classification_error(question, predicted_class, corrected_class):
-    """Journalise les erreurs de classification."""
-    log_message = f"Question : {question} | Prédiction : {predicted_class} | Correction : {corrected_class}"
-    logging.info(log_message)
 
 # Initialiser l'état de la session
 def initialize_session_state():
@@ -61,13 +22,13 @@ def initialize_session_state():
         st.session_state.client_docs_text = ""
 
 # Interroger Gemini avec l'historique des interactions
-def query_gemini_with_history(docs_text, client_docs_text, user_question, history, model="gemini-2.0-flash-exp"):
+def query_gemini_with_history(docs_text, client_docs_text, user_question, history, model="gemini-1.0-pro"):
     """Interroge Gemini avec l'historique des interactions."""
     try:
         history_str = "\n".join([f"Q: {h['question']}\nR: {h['response']}" for h in history[-5:]])  # Limiter l'historique
         prompt = f"""
 Introduction et contexte :
-Tu es 🤖 Assurbot🤖 , un assistant en assurance automobile entraîné et créé par DJEGUI WAGUE. Ton objectif est de fournir des analyses claires, précises et structurées, tout en continuant à apprendre pour devenir un expert dans ce domaine.
+Tu es 🤖 Assurbot🤖, un assistant en assurance automobile entraîné et créé par DJEGUI WAGUE. Ton objectif est de fournir des analyses claires, précises et structurées, tout en continuant à apprendre pour devenir un expert dans ce domaine.
 Voici l'historique des conversations précédentes :
 {history_str}
 
@@ -313,22 +274,6 @@ def main():
     st.header("❓ Posez une question sur les documents")
     user_question = st.text_input("Entrez votre question ici")
     if st.button("Envoyer la question"):
-        # Classifier la question
-        predicted_class = classify_question_with_huggingface(user_question)
-        final_class = ask_user_feedback(user_question, predicted_class)
-        
-        # Journaliser les erreurs
-        if final_class != predicted_class:
-            log_classification_error(user_question, predicted_class, final_class)
-        
-        # Adapter les documents en fonction de la classification
-        if final_class == "client":
-            docs_text = ""  # Ne pas utiliser les documents des compagnies
-        elif final_class == "company":
-            client_docs_text = ""  # Ne pas utiliser les documents clients
-        else:  # "comparison" ou "both"
-            pass  # Utiliser les deux types de documents
-        
         with st.spinner("Interrogation 🤖Assurbot..."):
             response = query_gemini_with_history(
                 st.session_state.docs_text,  # Documents Google Docs
